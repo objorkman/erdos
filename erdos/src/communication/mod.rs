@@ -26,6 +26,7 @@ mod message_codec;
 mod serializable;
 
 // Crate-wide visible submodules
+pub(crate) mod control_plane;
 pub(crate) mod pusher;
 pub(crate) mod receivers;
 pub(crate) mod senders;

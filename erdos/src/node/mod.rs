@@ -20,6 +20,8 @@ pub(crate) mod operator_event;
 pub(crate) mod worker;
 
 // Public submodules
+pub mod leader_node;
+pub mod worker_node;
 #[doc(hidden)]
 pub mod operator_executors;
 
