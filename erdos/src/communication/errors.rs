@@ -14,9 +14,9 @@ pub enum CommunicationError {
     DeserializeNotImplemented,
     /// Failed to serialize/deserialize data with Abomonation.
     AbomonationError(io::Error),
-    /// Failed to serialize/deserialize data with Bincode.
+    // /// Failed to serialize/deserialize data with Bincode.
     BincodeError(bincode::Error),
-    /// Failed to read/write data from/to the TCP stream.
+    // /// Failed to read/write data from/to the TCP stream.
     IoError(io::Error),
 }
 

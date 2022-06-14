@@ -1,43 +1,44 @@
-use std::net::SocketAddr;
-use tokio::{net::TcpStream, sync::mpsc::{self, Sender, Receiver}};
+use std::{net::SocketAddr, error::Error};
+use tokio::{net::{TcpStream, TcpListener}, sync::mpsc::{self, Sender, Receiver}};
 use tokio_util::codec::{Framed};
 use futures_util::stream::StreamExt;
 
-use crate::communication::control_plane::{notifications::{WorkerNotification, HeadNotification}, codecs::ControlPlaneCodec};
+use crate::communication::control_plane::{notifications::{ControlPlaneNotification}, codecs::ControlPlaneCodec};
 
 pub struct WorkerNode {
-    tx_leader: Sender<HeadNotification>,
+    leader_address: SocketAddr,
 }
 
 impl WorkerNode {
-    pub fn new(tx_leader: Sender<HeadNotification>) -> Self {
-        WorkerNode {
-            tx_leader,
-        }
+    pub async fn new(leader_address: SocketAddr) -> Result<Self, Box<dyn Error>> {
+        Ok(Self {
+            leader_address,
+        })
     }
 
-    async fn handle_messages(
-        framed: &mut Framed<TcpStream, ControlPlaneCodec<WorkerNotification, HeadNotification>>,
-        message: WorkerNotification,
-    ) {
-        println!("Got message {:?}", message);
-    }
-
-    pub async fn attach_worker(
-        id: usize,
-        stream: TcpStream,
-        address: SocketAddr,
-        tx_leader: &mut Sender<HeadNotification>,
-    ) -> Self {
-        let mut framed = Framed::new(stream, ControlPlaneCodec::<WorkerNotification, HeadNotification>::new());
-        // let (split_sink, split_stream) = framed.split();
+    pub async fn connect_to_leader(&self) -> Result<(), Box<dyn Error>> {
+       let stream = TcpStream::connect(self.leader_address).await?;
+        // Reads LeaderNotifications and sends WorkerNotifications
+        let framed = Framed::new(stream, ControlPlaneCodec::<ControlPlaneNotification>::new());
+        let (split_sink, mut split_stream) = framed.split();
         
-        // Channel to send WorkerNotifiations from Worker to Leader
-        let (tx_worker, rx_worker): (Sender<WorkerNotification>, Receiver<WorkerNotification>) = mpsc::channel(32);
+        match split_stream.next().await {
+            Some(Ok(control_plane_message)) => {
+                match control_plane_message {
+                    ControlPlaneNotification::Ready(worker_id) => {
+                        println!("Received the WorkerId: {} from the Leader.", worker_id)
+                    }
+                } 
+            }
+            _ => {
+                
+            }
+        }
 
-        let worker_node = WorkerNode::new(tx_leader.clone());
-        worker_node.tx_leader.send(HeadNotification::Ready(id)).await.unwrap();
+        // // Channel to send LeaderNotifiations from Worker to Leader
+        // let (tx_leader, rx_leader): (Sender<LeaderNotification>, Receiver<LeaderNotification>) = mpsc::unbounded_channel();
 
-        return worker_node;
+        // tx_leader.send(LeaderNotification::Ready()).await.unwrap();
+        Ok(())
     }
 }

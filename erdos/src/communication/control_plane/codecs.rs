@@ -5,50 +5,20 @@ use bytes::BytesMut;
 use serde::{Deserialize, Serialize};
 use tokio_util::codec::{Decoder, Encoder};
 
-use crate::communication::{
-    control_plane::notifications::{HeadNotification, WorkerNotification},
-    CodecError,
-};
+use crate::communication::CodecError;
 
-fn try_read_msg_size(buf: &mut BytesMut) -> Option<usize> {
-    if buf.len() >= 4 {
-        let msg_size_bytes = buf.split_to(4);
-        let msg_size = NetworkEndian::read_u32(&msg_size_bytes);
-        Some(msg_size as usize)
-    } else {
-        None
-    }
-}
-
-fn try_read_message<T>(buf: &mut BytesMut, msg_size: usize) -> Result<Option<T>, CodecError>
-where
-    for<'a> T: Deserialize<'a>,
-{
-    if buf.len() >= msg_size {
-        let msg_bytes = buf.split_to(msg_size);
-        bincode::deserialize(&msg_bytes)
-            .map(|msg| Some(msg))
-            .map_err(CodecError::from)
-    } else {
-        Ok(None)
-    }
-}
-
-/// Reads [`WorkerNotification`]s and writes [`HeadNotification`]s.
 #[derive(Debug)]
-pub struct ControlPlaneCodec<T, U>
+pub struct ControlPlaneCodec<T>
 where
-    T: Serialize,
-    U: for<'a> Deserialize<'a>,
+    T: Serialize + for<'a> Deserialize<'a>
 {
     msg_size: Option<usize>,
-    phantom: PhantomData<(T, U)>,
+    phantom: PhantomData<T>,
 }
 
-impl<T, U> ControlPlaneCodec<T, U>
+impl<T> ControlPlaneCodec<T>
 where
-    T: Serialize,
-    U: for<'a> Deserialize<'a>,
+    T: Serialize + for<'a> Deserialize<'a>
 {
     pub fn new() -> Self {
         Self {
@@ -56,24 +26,48 @@ where
             phantom: PhantomData,
         }
     }
+
+    fn try_read_msg_size(&self, buf: &mut BytesMut) -> Option<usize> {
+        if buf.len() >= 4 {
+            let msg_size_bytes = buf.split_to(4);
+            let msg_size = NetworkEndian::read_u32(&msg_size_bytes);
+            Some(msg_size as usize)
+        } else {
+            None
+        }
+    }
+
+    fn try_read_message(
+        &self,
+        buf: &mut BytesMut,
+        msg_size: usize,
+    ) -> Result<Option<T>, CodecError> {
+        if buf.len() >= msg_size {
+            let msg_bytes = buf.split_to(msg_size);
+            bincode::deserialize(&msg_bytes)
+                .map(|msg| Some(msg))
+                .map_err(CodecError::from)
+        } else {
+            Ok(None)
+        }
+    }
 }
 
-impl<T, U> Decoder for ControlPlaneCodec<T, U>
+impl<T> Decoder for ControlPlaneCodec<T>
 where
-    T: Serialize,
-    U: for<'a> Deserialize<'a>,
+    T: Serialize + for<'a> Deserialize<'a>
 {
-    type Item = U;
+    type Item = T;
     type Error = CodecError;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, CodecError> {
         if let Some(msg_size) = self.msg_size {
             // We already have a message size, decode the message.
-            try_read_message(buf, msg_size)
-        } else if let Some(msg_size) = try_read_msg_size(buf) {
+            self.try_read_message(buf, msg_size)
+        } else if let Some(msg_size) = self.try_read_msg_size(buf) {
             // Try to read the message size.
             self.msg_size = Some(msg_size);
-            try_read_message(buf, msg_size)
+            self.try_read_message(buf, msg_size)
         } else {
             // We need more bytes before we can read the message size.
             Ok(None)
@@ -81,10 +75,9 @@ where
     }
 }
 
-impl<T, U> Encoder<T> for ControlPlaneCodec<T, U>
+impl<T> Encoder<T> for ControlPlaneCodec<T>
 where
-    T: Serialize,
-    U: for<'a> Deserialize<'a>,
+    T: Serialize + for<'a> Deserialize<'a>
 {
     type Error = CodecError;
 

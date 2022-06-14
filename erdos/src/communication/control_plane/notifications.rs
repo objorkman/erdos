@@ -1,17 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::node::NodeId;
+use crate::node::{leader_node::WorkerId};
 
-/// Notifications sent to the head node.
+/// [`ControlPlaneNotifcation`] defines the type of notifications communicated between the leader and the workers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum HeadNotification {
-    /// Notifies the head that the specified node has finished setting up.
-    Ready(NodeId),
-}
-
-/// Notifications sent to worker nodes.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum WorkerNotification {
-    /// Notifies the worker to shut down.
-    Shutdown,
+pub enum ControlPlaneNotification {
+    Ready(WorkerId),
+    Testing,
 }
